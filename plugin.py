@@ -40,17 +40,18 @@
          </options>
     </param>
     <param field="Port" label="Port" width="30px" required="true" default="8082"/>
-    <param field="Mode1" label="Debug" width="75px">
+    <param field="Debuglvl" label="Debug" width="75px">
          <options>
-            <option label="True" value="Debug"/>
-            <option label="False" value="Normal"  default="true" />
+            <option label="Debug with rpdb" value="2"/>
+            <option label="Debug" value="1"/>
+            <option label="Normal" value="0"  default="true" />
          </options>
       </param>
     </params>
 </plugin>
 """
 
-import Domoticz,json 
+import Domoticz,json,rpdb
 
 from urllib.request import urlopen
 from urllib.parse import urlencode
@@ -94,11 +95,10 @@ def unittodev(u):
 def devtounit(type, circuit):
     global dType
     global device
-    
     lenr = len(dType[device]["relays"])
     leni = len(dType[device]["inputs"])
     lend = len(dType[device]["devices"])
-    
+
     if(type=="relays"):
         return 1 + sorted(dType[device][type].keys()).index(circuit)
     if(type=="inputs"):
@@ -118,16 +118,22 @@ def onStart():
 #   1-wire temp sensors are created dynamically when they are connected. They are detected in the onHeartbeat callback function
 #   Temp sensors - Unit 24..
 #
+    rpdb.set_trace()
     global UNIPI_URL
     global device
     global dType
-    
-  
+
     Domoticz.Log("onStart called")
     UNIPI_URL=UNIPI_URL+Parameters["Port"]
-    if Parameters["Mode1"] == "Debug":
+    if Parameters["Debuglvl"] > 0:
         Domoticz.Debugging(1)
+    if Parameters["Debuglvl"] == 2:
+        Domoticz.Log(rpdb)
+        rpdb.set_trace()
+
+
     device = Parameters["Mode2"]
+
     ctr = 1
     expdevicecount = len((dType[device]["relays"]).keys()) + len((dType[device]["inputs"]).keys())
     if (len(Devices) != expdevicecount):
