@@ -33,13 +33,19 @@
 """
 <plugin key="UniPIx" name="UniPI" author="ubee" version="1.0.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://www.google.com/">
     <params>
+    <param field="Mode2" label="Device Type" width="250px">
+         <options>
+            <option label="Unipi v1" value="Unipi"/>
+            <option label="Neuron S103" value="S103"  default="true" />
+         </options>
+    </param>
     <param field="Port" label="Port" width="30px" required="true" default="8082"/>
     <param field="Mode1" label="Debug" width="75px">
-			<options>
-				<option label="True" value="Debug"/>
-				<option label="False" value="Normal"  default="true" />
-			</options>
-		</param>
+         <options>
+            <option label="True" value="Debug"/>
+            <option label="False" value="Normal"  default="true" />
+         </options>
+      </param>
     </params>
 </plugin>
 """
@@ -50,13 +56,55 @@ from urllib.request import urlopen
 from urllib.parse import urlencode
 
 heartbeatCount=0
-HEARTBEAT_DIV=3                     # Every n:th call will trigger temp sensor detection
+HEARTBEAT_DIV=20                     # Every n:th call will trigger temp sensor detection
 OneWireIds=list()                   # list of detected 1-wire sensors. First element in list maps to Unit[24] in Domoticz.Device array
 
 
 UNIPI_URL="localhost:"
 
+device = "Unipi"
+dType = {}
+dType["Unipi"] = {}
+dType["Unipi"]["relays"] = { "1":"/rest/relay/1", "2":"/rest/relay/2", "3":"/rest/relay/3", "4":"/rest/relay/4", "5":"/rest/relay/5", "6":"/rest/relay/6", "7":"/rest/relay/7", "8":"/rest/relay/8" }
+dType["Unipi"]["inputs"] = { "1":"/rest/input/1", "2":"/rest/input/2", "3":"/rest/input/3", "4":"/rest/input/4", "5":"/rest/input/5", "6":"/rest/input/6", "7":"/rest/input/7", "8":"/rest/input/8" }
+dType["Unipi"]["devices"] = { "1":"/rest/dev/1", "2":"/rest/dev/2", }
 
+
+dType["S103"] = {}
+dType["S103"]["relays"] = {"1_01": "/rest/relay/1_01", "1_02": "/rest/relay/1_02", "1_03": "/rest/relay/1_03", "1_04": "/rest/relay/1_04" }
+dType["S103"]["inputs"] = {"1_01": "/rest/input/1_01", "1_02": "/rest/input/1_02", "1_03": "/rest/input/1_03", "1_04": "/rest/input/1_04" }
+dType["S103"]["devices"] = { "1":"/rest/dev/1", "2":"/rest/dev/2", }
+
+
+def unittodev(u):
+#   Get device name for unit number. Unit u  is 1..x based, while array is 0...x
+    global dType
+    global device
+    u -=1
+    lenr = len(dType[device]["relays"])
+    leni = len(dType[device]["inputs"])
+    lend = len(dType[device]["devices"])
+    if(u < lenr):
+        return "relays", sorted(dType[device]["relays"].keys())[u]
+    if(u < lenr+leni):
+        return "inputs", sorted(dType[device]["inputs"].keys())[u-lenr]
+    if(u < lenr+leni+lend):
+        return "devices", sorted(dType[device]["devices"].keys())[u-lenr-leni]
+
+def devtounit(type, circuit):
+    global dType
+    global device
+    
+    lenr = len(dType[device]["relays"])
+    leni = len(dType[device]["inputs"])
+    lend = len(dType[device]["devices"])
+    
+    if(type=="relays"):
+        return 1 + sorted(dType[device][type].keys()).index(circuit)
+    if(type=="inputs"):
+        return 1 + lenr + sorted(dType[device][type].keys()).index(circuit)
+    if(type=="devices"):
+        return 1 + lenr + lend + sorted(dType[device][type].keys()).index(circuit)
 
 def onStart():
 #
@@ -71,20 +119,33 @@ def onStart():
 #   Temp sensors - Unit 24..
 #
     global UNIPI_URL
+    global device
+    global dType
     
   
     Domoticz.Log("onStart called")
     UNIPI_URL=UNIPI_URL+Parameters["Port"]
     if Parameters["Mode1"] == "Debug":
         Domoticz.Debugging(1)
-    if (len(Devices) == 0):
-        for n in range(1,9):
-            Domoticz.Device(Name="Relay "+str(n), Unit=n, TypeName="Switch").Create()
+    device = Parameters["Mode2"]
+    ctr = 1
+    expdevicecount = len((dType[device]["relays"]).keys()) + len((dType[device]["inputs"]).keys())
+    if (len(Devices) != expdevicecount):
+        for key in sorted(dType[device]["relays"]):
+            Domoticz.Device(Name="Relay " + key, Unit=ctr, TypeName="Switch").Create()
+            ctr +=1
+            Domoticz.Log("Relay " + key + " created!")
         Domoticz.Log("Relay Devices created.")
+        for key in sorted(dType[device]["inputs"]):
+            Domoticz.Device(Name="Input "+ key, Unit=ctr, TypeName="Switch").Create()
+            ctr +=1
+            Domoticz.Log("Input " + key + " created!")
+        Domoticz.Log("Input Devices created.")
+
 #
 #   pick up all previolusly detected 1-wire sensors
 #
-    if len(Devices)>8:      
+    if len(Devices)>expdevicecount:      
         response = urlopen("http://"+ UNIPI_URL+"/rest/all").read().decode('utf-8')
         data=json.loads(response)   
         for item in data:
@@ -92,10 +153,9 @@ def onStart():
                 OneWireIds.append(item["circuit"])
     
     DumpConfigToLog()
-    Domoticz.Heartbeat(60)
+    Domoticz.Heartbeat(2)
     return True
 
-	
 
 def onStop():
     Domoticz.Log("onStop called")
@@ -113,26 +173,29 @@ def onMessage(Data, Status, Extra):
 
 
 def onCommand(Unit, Command, Level, Hue):
-    
+    global device
+    global dType   
    
     Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
 
     Command = Command.strip()
  #   action, sep, params = Command.partition(' ')
  #   action = action.capitalize()
-	
+   
 
 #
 #   8 first units are relays that can be toggled
 #
-    if Unit in range(1,9):
+    type, name = unittodev(Unit)
+    
+    if type == "relays":
         if (Command == 'On'):
-            RelaySet(Unit,1)
+            RelaySet(name,1)
             UpdateDevice(Unit,1,'On')
 
         elif (Command == 'Off'):
-            RelaySet(Unit,0)
-            UpdateDevice(Unit,0,'Off')	
+            RelaySet(name,0)
+            UpdateDevice(Unit,0,'Off')   
  
 
     return True
@@ -159,10 +222,24 @@ def onHeartbeat():
 #
     global heartbeatCount
     global OneWireIds
-    
-    Domoticz.Log("onHeartbeat called") 
+
     response = urlopen("http://"+ UNIPI_URL+"/rest/all").read().decode('utf-8')
     data=json.loads(response)
+
+    
+    for item in data:
+            if item["dev"] == "input":
+                 circuit = item['circuit']
+                 
+                 value = int(item["value"])
+                 d = {}
+                 d["counter"] = int(item["counter"])
+                 d["counter_mode"] = item["counter_mode"]
+                 d["debounce"] = int(item["debounce"])
+                 Unit = devtounit("inputs", circuit)
+                 if(value != Devices[Unit].nValue):
+                     UpdateDevice(Unit, value, json.dumps(d)) #Devices[Unit].Update(nValue=value, sValue = json.dumps(d))
+
 
     if heartbeatCount == 0:
         Domoticz.Log("Scan for new temp sensors")
@@ -210,7 +287,7 @@ def DumpConfigToLog():
     for item in OneWireIds:
         Domoticz.Debug("1-wire sensor "+ item)
     return
-	
+   
 def UpdateDevice(Unit, nValue, sValue):
  
 # Make sure that the Domoticz device still exists (they can be deleted) before updating it
@@ -227,11 +304,13 @@ def UpdateDevice(Unit, nValue, sValue):
 #       nValue = 0  Relay off
 #       nValue = 1  Relay on
 #    
-def RelaySet(Unit,nValue):
-    Domoticz.Debug("Relay no: "+str(Unit)+" value: "+ str(nValue))
-    response = urlopen("http://"+ UNIPI_URL+"/rest/relay/"+str(Unit),bytes(urlencode({'value': str(nValue)}),'utf-8')).read()
-    return
+def RelaySet(name,nValue):
+    global device
+    global dType
 
+    Domoticz.Debug("Relay "+name+" value: "+ str(nValue))
+    response = urlopen("http://"+ UNIPI_URL+dType[device]["relays"][name],bytes(urlencode({'value': str(nValue)}),'utf-8')).read()
+    return
 
 
 def findSensor(strId,data):
