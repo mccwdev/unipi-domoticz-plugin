@@ -40,11 +40,11 @@
          </options>
     </param>
     <param field="Port" label="Port" width="30px" required="true" default="8082"/>
-    <param field="Debuglvl" label="Debug" width="75px">
+    <param field="Mode1" label="Debug" width="75px">
          <options>
-            <option label="Debug with rpdb" value="2"/>
-            <option label="Debug" value="1"/>
-            <option label="Normal" value="0"  default="true" />
+            <option label="Debug with rpdb" value="3"/>
+            <option label="Debug" value="2"/>
+            <option label="Normal" value="1"  default="true" />
          </options>
       </param>
     </params>
@@ -52,7 +52,6 @@
 """
 
 import Domoticz,json,rpdb
-
 from urllib.request import urlopen
 from urllib.parse import urlencode
 
@@ -118,16 +117,15 @@ def onStart():
 #   1-wire temp sensors are created dynamically when they are connected. They are detected in the onHeartbeat callback function
 #   Temp sensors - Unit 24..
 #
-    rpdb.set_trace()
     global UNIPI_URL
     global device
     global dType
 
     Domoticz.Log("onStart called")
     UNIPI_URL=UNIPI_URL+Parameters["Port"]
-    if Parameters["Debuglvl"] > 0:
+    if int(Parameters["Mode1"]) > 1:
         Domoticz.Debugging(1)
-    if Parameters["Debuglvl"] == 2:
+    if int(Parameters["Mode1"]) == 2:
         Domoticz.Log(rpdb)
         rpdb.set_trace()
 
