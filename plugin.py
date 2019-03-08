@@ -152,29 +152,37 @@ def onStart():
         Domoticz.Debugging(1)
     device = Parameters["Mode2"]
     ctr = 1
-    expdevicecount = len((dType[device]["relays"]).keys()) + len((dType[device]["inputs"]).keys())
-    if len(Devices) != expdevicecount:
-        for key in sorted(dType[device]["relays"]):
-            Domoticz.Device(Name="Relay " + key, Unit=ctr, TypeName="Switch").Create()
-            ctr += 1
-            Domoticz.Log("Relay " + key + " created!")
-        Domoticz.Log("Relay Devices created")
-        for key in sorted(dType[device]["inputs"]):
-            Domoticz.Device(Name="Input " + key, Unit=ctr, TypeName="Switch").Create()
-            ctr += 1
-            Domoticz.Log("Input " + key + " created!")
-        Domoticz.Log("Input Devices created")
+    # expdevicecount = len((dType[device]["relays"]).keys()) + len((dType[device]["inputs"]).keys())
+    # if len(Devices) != expdevicecount:
+    #     for key in sorted(dType[device]["relays"]):
+    #         Domoticz.Device(Name="Relay " + key, Unit=ctr, TypeName="Switch").Create()
+    #         ctr += 1
+    #         Domoticz.Log("Relay " + key + " created!")
+    #     Domoticz.Log("Relay Devices created")
+    #     for key in sorted(dType[device]["inputs"]):
+    #         Domoticz.Device(Name="Input " + key, Unit=ctr, TypeName="Switch").Create()
+    #         ctr += 1
+    #         Domoticz.Log("Input " + key + " created!")
+    #     Domoticz.Log("Input Devices created")
 
     #
     #   pick up all previously detected 1-wire sensors
     #
-    if len(Devices) > expdevicecount:
-        response = urlopen("http://" + UNIPI_URL + "/rest/all").read().decode('utf-8')
-        data = json.loads(response)
-        for item in data:
-            # Domoticz.Log("Item %s, Circuit %s" % (item["dev"], item["circuit"]))
-            if item["dev"] == "temp":
-                OneWireIds.append(item["circuit"])
+    # if len(Devices) > expdevicecount:
+    response = urlopen("http://" + UNIPI_URL + "/rest/all").read().decode('utf-8')
+    data = json.loads(response)
+    for item in data:
+        Domoticz.Log("Add %s device %s" % (item["dev"], item["circuit"]))
+        if item["dev"] == 'input':
+            Domoticz.Device(Name="Input " + item["circuit"], Unit=ctr, TypeName="Switch", Options=item[
+                "circuit"]).Create()
+        elif item["dev"] == 'relay':
+            Domoticz.Device(Name="Relay " + item["circuit"], Unit=ctr, TypeName="Switch", Options=item["circuit"]).Create()
+        elif item["dev"] == "temp":
+            # OneWireIds.append(item["circuit"])
+            Domoticz.Device(Name="Temp Sensor " + item["circuit"], Unit=ctr, TypeName="Temperature",
+                            Options=item["circuit"]).Create()
+        ctr += 1
 
     DumpConfigToLog()
     Domoticz.Heartbeat(2)
